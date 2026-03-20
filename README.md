@@ -255,7 +255,9 @@ python3 -c "from ai.decision_maker import DecisionMaker; dm = DecisionMaker(); p
 | Testing | ✅ Passing | 100% |
 | Documentation | ✅ Complete | 100% |
 
-**Overall Status: 🎉 Production Ready**
+**Overall Status: 🚧 In Development**
+
+> **⚠️ Note:** This project is currently **not complete**. The core bot code is fully functional, but it requires proper memory offsets to be configured for coordinate reading. You will need to use Cheat Engine (or scanmem on Linux) to find the correct pointer chains for your Minecraft installation. The offsets configuration will be set up by the user in a future update.
 
 ---
 
