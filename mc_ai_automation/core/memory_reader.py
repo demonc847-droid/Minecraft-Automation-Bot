@@ -352,6 +352,40 @@ class MemoryReader:
             return struct.unpack('<i', data)[0]
         return None
     
+    def read_pointer_chain(self, base_address: int, offsets: List[int]) -> Optional[float]:
+        """
+        Follow a chain of 64-bit pointers to read a float value.
+        
+        This method properly handles 64-bit pointer dereferencing, which is
+        required for reading X and Z coordinates that are stored behind
+        pointer chains in Minecraft's memory structure.
+        
+        Args:
+            base_address: Starting base address
+            offsets: List of offsets to follow (intermediate are pointer offsets, last is value offset)
+            
+        Returns:
+            Float value at the end of the pointer chain, or None if failed
+        """
+        if not offsets:
+            return None
+        
+        addr = base_address
+        
+        # Follow all intermediate pointers (64-bit)
+        for offset in offsets[:-1]:
+            # Read 64-bit pointer (8 bytes)
+            ptr_bytes = self.read_memory(addr + offset, 8)
+            if not ptr_bytes or len(ptr_bytes) != 8:
+                return None
+            # Unpack as unsigned 64-bit integer (little-endian)
+            addr = struct.unpack('<Q', ptr_bytes)[0]
+            if addr == 0:
+                return None
+        
+        # Read the final float value
+        return self.read_float(addr + offsets[-1])
+
     def read_with_offsets(self, base: int, offsets: List[int]) -> Optional[float]:
         """
         Follow pointer chain to read final value.
@@ -363,12 +397,19 @@ class MemoryReader:
         Returns:
             Float value or None if failed
         """
+        if not offsets:
+            return None
+        
         addr = base
+        # Follow all intermediate pointers (64-bit)
         for offset in offsets[:-1]:
-            ptr = self.read_int(addr + offset)
-            if ptr is None:
+            # Read 64-bit pointer (8 bytes) - FIX: use 8 bytes for 64-bit pointers
+            ptr_bytes = self.read_memory(addr + offset, 8)
+            if not ptr_bytes or len(ptr_bytes) != 8:
                 return None
-            addr = ptr
+            addr = struct.unpack('<Q', ptr_bytes)[0]
+            if addr == 0:
+                return None
         
         return self.read_float(addr + offsets[-1])
     
@@ -392,6 +433,38 @@ class MemoryReader:
             return data.decode('utf-8', errors='ignore')
         return None
     
+    def _read_coordinate(self, player_base: int, coord_config: Any) -> Optional[float]:
+        """
+        Read a coordinate value, handling both direct addresses and pointer chains.
+        
+        Args:
+            player_base: Player base address
+            coord_config: Coordinate configuration (string offset or dict with type/chain)
+            
+        Returns:
+            Coordinate value or None if failed
+        """
+        if isinstance(coord_config, str):
+            # Legacy format: simple offset string
+            return self.read_with_offsets(player_base, self._parse_offset_chain(coord_config))
+        elif isinstance(coord_config, dict):
+            coord_type = coord_config.get("type", "pointer_chain")
+            
+            if coord_type == "direct":
+                # Direct address read
+                address = int(coord_config.get("address", "0x0"), 16)
+                return self.read_float(address)
+            elif coord_type == "pointer_chain":
+                # Pointer chain
+                chain = coord_config.get("chain", [])
+                if not chain:
+                    return None
+                # Convert hex strings to integers
+                chain_ints = [int(c, 16) if isinstance(c, str) else c for c in chain]
+                return self.read_pointer_chain(player_base, chain_ints)
+        
+        return None
+
     def get_player_state(self) -> Optional[PlayerState]:
         """
         Read player state from memory.
@@ -413,11 +486,11 @@ class MemoryReader:
             if player_base is None:
                 return None
             
-            # Read position
+            # Read position - handle both new pointer chain format and legacy format
             pos_offsets = player_offsets.get("position", {})
-            x = self.read_with_offsets(player_base, self._parse_offset_chain(pos_offsets.get("x", "0x0")))
-            y = self.read_with_offsets(player_base, self._parse_offset_chain(pos_offsets.get("y", "0x0")))
-            z = self.read_with_offsets(player_base, self._parse_offset_chain(pos_offsets.get("z", "0x0")))
+            x = self._read_coordinate(player_base, pos_offsets.get("x", "0x0"))
+            y = self._read_coordinate(player_base, pos_offsets.get("y", "0x0"))
+            z = self._read_coordinate(player_base, pos_offsets.get("z", "0x0"))
             
             # Read velocity
             vel_offsets = player_offsets.get("velocity", {})
@@ -620,10 +693,13 @@ class MemoryReader:
         """
         addr = base
         for offset in offsets[:-1]:
-            ptr = self.read_int(addr + offset)
-            if ptr is None:
+            # Read 64-bit pointer (8 bytes)
+            ptr_bytes = self.read_memory(addr + offset, 8)
+            if not ptr_bytes or len(ptr_bytes) != 8:
                 return None
-            addr = ptr
+            addr = struct.unpack('<Q', ptr_bytes)[0]
+            if addr == 0:
+                return None
         return addr + offsets[-1] if offsets else addr
     
     def _parse_offset_chain(self, offset_str: str) -> List[int]:

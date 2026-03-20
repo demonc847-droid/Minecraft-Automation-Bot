@@ -13,15 +13,6 @@ Classes:
 import time
 from typing import List, Tuple, Optional, Dict, Any
 
-from core.input_simulator import (
-    open_inventory as input_open_inventory,
-    close_inventory as input_close_inventory,
-    select_slot as input_select_slot,
-    drop_item as input_drop_item,
-    move_item as input_move_item,
-    use_item as input_use_item
-)
-
 
 class Inventory:
     """
@@ -128,21 +119,27 @@ class Inventory:
     ARMOR = ["helmet", "chestplate", "leggings", "boots"]
     FOOD = ["bread", "steak", "cooked_porkchop", "golden_apple", "apple", "carrot", "potato"]
     
-    def __init__(self):
-        """Initialize the Inventory module."""
+    def __init__(self, input_simulator=None):
+        """
+        Initialize the Inventory module.
+        
+        Args:
+            input_simulator: InputSimulator instance for executing actions
+        """
+        self.input_simulator = input_simulator
         self.inventory_open = False
         
     def open_inventory(self) -> None:
         """Open the player's inventory."""
-        if not self.inventory_open:
-            input_open_inventory()
+        if not self.inventory_open and self.input_simulator:
+            self.input_simulator.open_inventory()
             self.inventory_open = True
             time.sleep(0.1)
             
     def close_inventory(self) -> None:
         """Close the player's inventory."""
-        if self.inventory_open:
-            input_close_inventory()
+        if self.inventory_open and self.input_simulator:
+            self.input_simulator.close_inventory()
             self.inventory_open = False
             time.sleep(0.1)
             
@@ -153,7 +150,8 @@ class Inventory:
         Args:
             slot: Slot number (0-8 for hotbar)
         """
-        input_select_slot(slot)
+        if self.input_simulator:
+            self.input_simulator.select_slot(slot)
         
     def craft_item(self, item_id: str, count: int = 1, 
                    inventory: List[Dict] = None) -> bool:
@@ -244,7 +242,8 @@ class Inventory:
         self.select_slot(item_slot)
         
         # Use the item to equip it (for armor) or just hold it (for tools)
-        input_use_item(10)
+        if self.input_simulator:
+            self.input_simulator.use_item(10)
         
         return True
         
@@ -422,7 +421,8 @@ class Inventory:
             if item.get("item_id") == item_id:
                 slot = item.get("slot")
                 self.select_slot(slot)
-                input_drop_item(all)
+                if self.input_simulator:
+                    self.input_simulator.drop_item(all)
                 return True
                 
         return False

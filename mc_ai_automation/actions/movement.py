@@ -14,14 +14,6 @@ import math
 import time
 from typing import List, Tuple, Optional
 
-from core.input_simulator import (
-    move_to as input_move_to,
-    look_at as input_look_at,
-    look_at_position,
-    jump as input_jump,
-    sneak as input_sneak
-)
-
 
 class Movement:
     """
@@ -31,8 +23,14 @@ class Movement:
     including walking, sprinting, path navigation, and camera control.
     """
     
-    def __init__(self):
-        """Initialize the Movement module."""
+    def __init__(self, input_simulator=None):
+        """
+        Initialize the Movement module.
+        
+        Args:
+            input_simulator: InputSimulator instance for executing actions
+        """
+        self.input_simulator = input_simulator
         self.current_speed = "walk"
         self.is_sneaking = False
         
@@ -47,16 +45,17 @@ class Movement:
         """
         self.current_speed = speed
         
-        if speed == "sneak":
-            if not self.is_sneaking:
-                input_sneak(0.5)  # Toggle sneak on
-                self.is_sneaking = True
-        elif self.is_sneaking:
-            input_sneak(0.5)  # Toggle sneak off
-            self.is_sneaking = False
-        
-        # Move to target position
-        input_move_to(x, z)
+        if self.input_simulator:
+            if speed == "sneak":
+                if not self.is_sneaking:
+                    self.input_simulator.sneak(0.5)  # Toggle sneak on
+                    self.is_sneaking = True
+            elif self.is_sneaking:
+                self.input_simulator.sneak(0.5)  # Toggle sneak off
+                self.is_sneaking = False
+            
+            # Move to target position
+            self.input_simulator.move_to(x, z)
         
     def sprint_to(self, x: float, z: float) -> None:
         """
@@ -78,7 +77,8 @@ class Movement:
         for waypoint in waypoints:
             x, y, z = waypoint
             # Look at the waypoint first
-            look_at_position(x, y, z)
+            if self.input_simulator:
+                self.input_simulator.look_at_position(x, y, z)
             # Move to the waypoint
             self.walk_to(x, z)
             # Small delay between waypoints
@@ -93,7 +93,8 @@ class Movement:
         """
         # Normalize yaw to -180 to 180 range
         yaw = ((yaw + 180) % 360) - 180
-        input_look_at(yaw, 0)  # Keep pitch at 0
+        if self.input_simulator:
+            self.input_simulator.look_at(yaw, 0)  # Keep pitch at 0
         
     def turn_to_pitch(self, pitch: float) -> None:
         """
@@ -104,7 +105,8 @@ class Movement:
         """
         # Clamp pitch to valid range
         pitch = max(-90, min(90, pitch))
-        input_look_at(0, pitch)  # Keep yaw at 0
+        if self.input_simulator:
+            self.input_simulator.look_at(0, pitch)  # Keep yaw at 0
         
     def look_at_target(self, x: float, y: float, z: float) -> None:
         """
@@ -115,7 +117,8 @@ class Movement:
             y: Target Y coordinate
             z: Target Z coordinate
         """
-        look_at_position(x, y, z)
+        if self.input_simulator:
+            self.input_simulator.look_at_position(x, y, z)
         
     def jump_and_move(self, x: float, z: float) -> None:
         """
@@ -125,7 +128,8 @@ class Movement:
             x: Target X coordinate
             z: Target Z coordinate
         """
-        input_jump()
+        if self.input_simulator:
+            self.input_simulator.jump()
         time.sleep(0.1)  # Small delay for jump to start
         self.walk_to(x, z)
         
@@ -172,7 +176,8 @@ class Movement:
         
     def jump(self) -> None:
         """Make the player jump."""
-        input_jump()
+        if self.input_simulator:
+            self.input_simulator.jump()
         
     def sneak(self, duration: float = 0.0) -> None:
         """
@@ -181,7 +186,8 @@ class Movement:
         Args:
             duration: How long to hold sneak (0 for toggle)
         """
-        input_sneak(duration)
+        if self.input_simulator:
+            self.input_simulator.sneak(duration)
         if duration == 0:
             self.is_sneaking = not self.is_sneaking
         else:
@@ -189,8 +195,8 @@ class Movement:
             
     def stop(self) -> None:
         """Stop all movement and reset sneak state."""
-        if self.is_sneaking:
-            input_sneak(0.5)  # Toggle sneak off
+        if self.is_sneaking and self.input_simulator:
+            self.input_simulator.sneak(0.5)  # Toggle sneak off
             self.is_sneaking = False
             
     def calculate_distance(self, x1: float, z1: float, x2: float, z2: float) -> float:

@@ -13,16 +13,6 @@ Classes:
 import time
 from typing import List, Tuple, Optional, Dict, Any
 
-from core.input_simulator import (
-    attack as input_attack,
-    block_with_shield,
-    use_item as input_use_item,
-    look_at_position,
-    jump as input_jump,
-    sneak as input_sneak,
-    select_slot
-)
-
 
 class Combat:
     """
@@ -42,8 +32,14 @@ class Combat:
         "minecraft:magma_cube", "minecraft:slime"
     ]
     
-    def __init__(self):
-        """Initialize the Combat module."""
+    def __init__(self, input_simulator=None):
+        """
+        Initialize the Combat module.
+        
+        Args:
+            input_simulator: InputSimulator instance for executing actions
+        """
+        self.input_simulator = input_simulator
         self.is_blocking = False
         self.last_attack_time = 0
         self.attack_cooldown = 0.625  # Minecraft attack cooldown in seconds
@@ -62,7 +58,8 @@ class Combat:
             time.sleep(self.attack_cooldown - (current_time - self.last_attack_time))
         
         # Perform attack
-        input_attack(hold_ticks)
+        if self.input_simulator:
+            self.input_simulator.attack(hold_ticks)
         self.last_attack_time = time.time()
         
     def attack_nearest_hostile(self, game_state: Dict[str, Any] = None) -> bool:
@@ -97,7 +94,8 @@ class Combat:
         # Look at the entity
         pos = nearest_hostile.get("position", {})
         if pos:
-            look_at_position(pos.get("x", 0), pos.get("y", 0), pos.get("z", 0))
+            if self.input_simulator:
+                self.input_simulator.look_at_position(pos.get("x", 0), pos.get("y", 0), pos.get("z", 0))
             time.sleep(0.05)  # Small delay to aim
             
             # Attack
@@ -113,8 +111,8 @@ class Combat:
         Args:
             duration: How long to hold the block in seconds
         """
-        if not self.is_blocking:
-            block_with_shield(duration)
+        if not self.is_blocking and self.input_simulator:
+            self.input_simulator.block_with_shield(duration)
             self.is_blocking = True
             time.sleep(duration)
             # Shield blocking is held, not toggled in Minecraft
@@ -122,9 +120,9 @@ class Combat:
             
     def stop_defending(self) -> None:
         """Stop blocking with shield."""
-        if self.is_blocking:
+        if self.is_blocking and self.input_simulator:
             # Release the block by doing a quick action
-            input_attack(1)  # Quick attack to release block
+            self.input_simulator.attack(1)  # Quick attack to release block
             self.is_blocking = False
             
     def flee_from(self, danger_position: Tuple[float, float, float], 
@@ -136,31 +134,32 @@ class Combat:
             danger_position: Position of the danger (x, y, z)
             player_position: Current player position (x, y, z)
         """
-        if player_position is None:
-            # If no player position given, just run opposite to danger
-            # This is a simplified implementation
-            input_jump()  # Jump for momentum
+        if self.input_simulator:
+            if player_position is None:
+                # If no player position given, just run opposite to danger
+                # This is a simplified implementation
+                self.input_simulator.jump()  # Jump for momentum
+                time.sleep(0.1)
+                return
+                
+            # Calculate opposite direction
+            dx = player_position[0] - danger_position[0]
+            dz = player_position[2] - danger_position[2]
+            
+            # Normalize and scale
+            distance = (dx ** 2 + dz ** 2) ** 0.5
+            if distance > 0:
+                dx /= distance
+                dz /= distance
+                
+            # Move away from danger
+            flee_x = player_position[0] + dx * 10
+            flee_z = player_position[2] + dz * 10
+            
+            # Sprint away (handled by movement module)
+            # For now, just jump and move
+            self.input_simulator.jump()
             time.sleep(0.1)
-            return
-            
-        # Calculate opposite direction
-        dx = player_position[0] - danger_position[0]
-        dz = player_position[2] - danger_position[2]
-        
-        # Normalize and scale
-        distance = (dx ** 2 + dz ** 2) ** 0.5
-        if distance > 0:
-            dx /= distance
-            dz /= distance
-            
-        # Move away from danger
-        flee_x = player_position[0] + dx * 10
-        flee_z = player_position[2] + dz * 10
-        
-        # Sprint away (handled by movement module)
-        # For now, just jump and move
-        input_jump()
-        time.sleep(0.1)
         
     def retreat_and_heal(self, health: float, food_items: List[Dict] = None) -> None:
         """
@@ -170,8 +169,9 @@ class Combat:
             health: Current health level (0-20)
             food_items: List of food items in inventory
         """
-        # Sneak to reduce damage
-        input_sneak(0.5)
+        if self.input_simulator:
+            # Sneak to reduce damage
+            self.input_simulator.sneak(0.5)
         
         # Try to eat food if health is low
         if health < 15 and food_items:
@@ -195,11 +195,11 @@ class Combat:
                     best_value = value
                     best_food = item
             
-            if best_food:
+            if best_food and self.input_simulator:
                 # Select food slot and eat
                 slot = best_food.get("slot", 0)
-                select_slot(slot)
-                input_use_item(40)  # Hold to eat
+                self.input_simulator.select_slot(slot)
+                self.input_simulator.use_item(40)  # Hold to eat
                 
     def dodge_attack(self, direction: str = "left") -> None:
         """
@@ -208,9 +208,10 @@ class Combat:
         Args:
             direction: Direction to dodge - "left", "right", or "back"
         """
-        # Jump and move in direction
-        input_jump()
-        time.sleep(0.05)
+        if self.input_simulator:
+            # Jump and move in direction
+            self.input_simulator.jump()
+            time.sleep(0.05)
         
         # Direction is handled by movement module
         # This is a simplified version
@@ -239,7 +240,8 @@ class Combat:
         circle_z = player_position[2] + math.cos(circle_angle) * 2
         
         # Look at target while moving
-        look_at_position(target_position[0], target_position[1], target_position[2])
+        if self.input_simulator:
+            self.input_simulator.look_at_position(target_position[0], target_position[1], target_position[2])
         
         # Attack periodically
         current_time = time.time()
@@ -261,7 +263,8 @@ class Combat:
         """
         Perform a critical hit by attacking while falling.
         """
-        input_jump()
+        if self.input_simulator:
+            self.input_simulator.jump()
         time.sleep(0.2)  # Wait for fall
         self.attack_entity()
         

@@ -13,14 +13,6 @@ Classes:
 import time
 from typing import List, Tuple, Optional, Dict, Any
 
-from core.input_simulator import (
-    break_block as input_break_block,
-    use_item as input_use_item,
-    look_at_position,
-    select_slot,
-    move_to
-)
-
 
 class Gathering:
     """
@@ -65,8 +57,14 @@ class Gathering:
         "minecraft:ancient_debris"
     ]
     
-    def __init__(self):
-        """Initialize the Gathering module."""
+    def __init__(self, input_simulator=None):
+        """
+        Initialize the Gathering module.
+        
+        Args:
+            input_simulator: InputSimulator instance for executing actions
+        """
+        self.input_simulator = input_simulator
         self.is_mining = False
         self.last_mine_time = 0
         
@@ -80,9 +78,9 @@ class Gathering:
             position: Position of the block (x, y, z)
             hold_ticks: Number of ticks to hold the break button
         """
-        if position:
+        if position and self.input_simulator:
             # Look at the block first
-            look_at_position(position[0], position[1], position[2])
+            self.input_simulator.look_at_position(position[0], position[1], position[2])
             time.sleep(0.05)
         
         # Check for tool requirements
@@ -92,7 +90,8 @@ class Gathering:
         
         # Mine the block
         self.is_mining = True
-        input_break_block(hold_ticks)
+        if self.input_simulator:
+            self.input_simulator.break_block(hold_ticks)
         self.last_mine_time = time.time()
         self.is_mining = False
         
@@ -122,7 +121,8 @@ class Gathering:
             block_y = y + i
             
             # Look at the log block
-            look_at_position(x, block_y, z)
+            if self.input_simulator:
+                self.input_simulator.look_at_position(x, block_y, z)
             time.sleep(0.05)
             
             # Chop the block
