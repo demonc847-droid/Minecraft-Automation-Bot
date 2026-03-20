@@ -77,7 +77,7 @@ class MemoryReader:
         try:
             libc_name = ctypes.util.find_library("c")
             if libc_name:
-                self.libc = ctypes.CDLL(libc_name)
+                self.libc = ctypes.CDLL(libc_name, use_errno=True)
             else:
                 raise RuntimeError("Could not find C library")
         except Exception as e:
@@ -158,6 +158,40 @@ class MemoryReader:
             }
         }
     
+    def _check_permissions(self) -> bool:
+        """
+        Check if we have permission to read memory.
+        
+        Returns:
+            True if we have permission, False otherwise
+        """
+        if self.pid is None:
+            return False
+        
+        try:
+            # Try reading 1 byte at a known address
+            test_addr = self.base_address or 0x1000
+            self.read_memory(test_addr, 1)
+            return True
+        except PermissionError:
+            # Check Yama setting
+            try:
+                with open('/proc/sys/kernel/yama/ptrace_scope', 'r') as f:
+                    scope = f.read().strip()
+                    if scope == '1':
+                        print("\n⚠️  Yama ptrace_scope = 1 (restricted)")
+                        print("   To fix permanently:")
+                        print("   sudo sysctl kernel.yama.ptrace_scope=0")
+                        print("   echo 'kernel.yama.ptrace_scope=0' | sudo tee -a /etc/sysctl.d/99-minecraft.conf")
+                        print("   sudo sysctl --system")
+                        return False
+            except FileNotFoundError:
+                pass
+            return False
+        except Exception:
+            pass
+        return False
+
     def attach(self) -> bool:
         """
         Attach to Minecraft process.
@@ -177,6 +211,11 @@ class MemoryReader:
                 return False
             
             print(f"Attached to Minecraft (PID: {self.pid}, Base: 0x{self.base_address:x})")
+            
+            # Check permissions after attaching
+            if not self._check_permissions():
+                print("⚠️  Warning: Limited memory access permissions detected")
+            
             return True
             
         except Exception as e:
@@ -256,9 +295,66 @@ class MemoryReader:
             print(f"Error getting module base: {e}")
             return None
     
+    def _resolve_module_base(self, module_name: str) -> Optional[int]:
+        """
+        Find base address of a loaded module by scanning /proc/pid/maps.
+        
+        Args:
+            module_name: Name of the module (e.g., "libjvm.so", "libc.so")
+            
+        Returns:
+            Base address of the module or None if not found
+        """
+        if self.pid is None:
+            return None
+        
+        try:
+            maps_file = f"/proc/{self.pid}/maps"
+            with open(maps_file, 'r') as f:
+                for line in f:
+                    if module_name in line:
+                        # Parse address range (format: "start-end perms offset dev inode pathname")
+                        addr_range = line.split()[0]
+                        base_addr = int(addr_range.split('-')[0], 16)
+                        return base_addr
+            return None
+        except Exception as e:
+            print(f"Error resolving module base for {module_name}: {e}")
+            return None
+    
     def read_memory(self, address: int, size: int) -> Optional[bytes]:
         """
-        Read memory from Minecraft process.
+        Read memory from Minecraft process with automatic fallback.
+        
+        Tries process_vm_readv syscall first (faster), then falls back to
+        /proc/pid/mem if the syscall fails with EPERM.
+        
+        Args:
+            address: Memory address to read
+            size: Number of bytes to read
+            
+        Returns:
+            Bytes read or None if failed
+        """
+        if self.pid is None:
+            return None
+        
+        # Try syscall first (faster)
+        result = self._read_memory_syscall(address, size)
+        if result is not None:
+            return result
+        
+        # If syscall fails, try /proc/pid/mem fallback
+        result = self._read_memory_proc(address, size)
+        if result is not None:
+            return result
+        
+        # Both methods failed
+        return None
+    
+    def _read_memory_syscall(self, address: int, size: int) -> Optional[bytes]:
+        """
+        Read memory using process_vm_readv syscall.
         
         Args:
             address: Memory address to read
@@ -299,12 +395,80 @@ class MemoryReader:
             )
             
             if result == -1:
+                # Check errno for permission error
+                errno = ctypes.get_errno()
+                if errno == 1:  # EPERM - Permission denied
+                    # This is expected with ptrace_scope=1
+                    # Don't print error, just fall back silently
+                    return None
+                elif errno == 14:  # EFAULT - Bad address
+                    print(f"Invalid memory address: 0x{address:x}")
+                else:
+                    print(f"Unexpected syscall error: errno {errno}")
                 return None
             
             return buf.raw[:result]
             
         except Exception as e:
-            print(f"Error reading memory: {e}")
+            print(f"Error reading memory via syscall: {e}")
+            return None
+    
+    def _read_memory_proc(self, address: int, size: int) -> Optional[bytes]:
+        """
+        Read memory using /proc/pid/mem (fallback method).
+        
+        Args:
+            address: Memory address to read
+            size: Number of bytes to read
+            
+        Returns:
+            Bytes read or None if failed
+        """
+        if self.pid is None:
+            return None
+        
+        try:
+            mem_file = f"/proc/{self.pid}/mem"
+            with open(mem_file, 'rb') as f:
+                f.seek(address)
+                data = f.read(size)
+                if len(data) == size:
+                    return data
+                return None
+        except PermissionError:
+            # Silently fail - permission checking is done separately
+            return None
+        except Exception as e:
+            print(f"Error reading memory via /proc: {e}")
+            return None
+    
+    def read_memory_proc(self, address: int, size: int) -> Optional[bytes]:
+        """
+        Read memory using /proc/pid/mem (requires sudo).
+        
+        Args:
+            address: Memory address to read
+            size: Number of bytes to read
+            
+        Returns:
+            Bytes read or None if failed
+        """
+        if self.pid is None:
+            return None
+        
+        try:
+            mem_file = f"/proc/{self.pid}/mem"
+            with open(mem_file, 'rb') as f:
+                f.seek(address)
+                data = f.read(size)
+                if len(data) == size:
+                    return data
+                return None
+        except PermissionError:
+            print(f"Permission denied reading /proc/{self.pid}/mem. Run with sudo!")
+            return None
+        except Exception as e:
+            print(f"Error reading memory via /proc: {e}")
             return None
     
     def read_float(self, address: int) -> Optional[float]:
@@ -317,9 +481,16 @@ class MemoryReader:
         Returns:
             Float value or None if failed
         """
+        # Try syscall first
         data = self.read_memory(address, 4)
         if data and len(data) == 4:
             return struct.unpack('<f', data)[0]
+        
+        # Fallback to /proc/pid/mem if syscall fails
+        data = self.read_memory_proc(address, 4)
+        if data and len(data) == 4:
+            return struct.unpack('<f', data)[0]
+        
         return None
     
     def read_double(self, address: int) -> Optional[float]:
@@ -412,26 +583,40 @@ class MemoryReader:
                 return None
         
         return self.read_float(addr + offsets[-1])
-    
-    def read_string(self, address: int, max_length: int = 256) -> Optional[str]:
+
+    def _get_pointer_chain(self, base: int, offsets: List[int]) -> Optional[int]:
         """
-        Read a null-terminated string from memory.
-        
+        Follow pointer chain to get final address.
+
         Args:
-            address: Memory address
-            max_length: Maximum string length
-            
+            base: Base address or module name with offset (e.g., "libjvm.so+0x123456")
+            offsets: Offset chain
+
         Returns:
-            String or None if failed
+            Final address or None if failed
         """
-        data = self.read_memory(address, max_length)
-        if data:
-            # Find null terminator
-            null_pos = data.find(b'\x00')
-            if null_pos != -1:
-                return data[:null_pos].decode('utf-8', errors='ignore')
-            return data.decode('utf-8', errors='ignore')
-        return None
+        # Handle module name with offset (e.g., "libjvm.so+0x123456")
+        if isinstance(base, str) and "+" in base:
+            try:
+                module_name, offset_str = base.split("+")
+                offset = int(offset_str, 16)
+                base_addr = self._resolve_module_base(module_name)
+                if base_addr is None:
+                    return None
+                base = base_addr + offset
+            except ValueError:
+                pass  # Not a valid module+offset format, treat as normal base
+
+        addr = base
+        for offset in offsets[:-1]:
+            # Read 64-bit pointer (8 bytes)
+            ptr_bytes = self.read_memory(addr + offset, 8)
+            if not ptr_bytes or len(ptr_bytes) != 8:
+                return None
+            addr = struct.unpack('<Q', ptr_bytes)[0]
+            if addr == 0:
+                return None
+        return addr + offsets[-1] if offsets else addr
     
     def _read_coordinate(self, player_base: int, coord_config: Any) -> Optional[float]:
         """
@@ -680,27 +865,6 @@ class MemoryReader:
             timestamp=time.time()
         )
     
-    def _get_pointer_chain(self, base: int, offsets: List[int]) -> Optional[int]:
-        """
-        Follow pointer chain to get final address.
-        
-        Args:
-            base: Base address
-            offsets: Offset chain
-            
-        Returns:
-            Final address or None if failed
-        """
-        addr = base
-        for offset in offsets[:-1]:
-            # Read 64-bit pointer (8 bytes)
-            ptr_bytes = self.read_memory(addr + offset, 8)
-            if not ptr_bytes or len(ptr_bytes) != 8:
-                return None
-            addr = struct.unpack('<Q', ptr_bytes)[0]
-            if addr == 0:
-                return None
-        return addr + offsets[-1] if offsets else addr
     
     def _parse_offset_chain(self, offset_str: str) -> List[int]:
         """

@@ -14,6 +14,11 @@ git clone <repository-url>
 cd mc_ai_automation
 pip install -r requirements.txt
 
+# One-time system setup (Linux only)
+sudo sysctl kernel.yama.ptrace_scope=0
+echo 'kernel.yama.ptrace_scope=0' | sudo tee -a /etc/sysctl.d/99-minecraft.conf
+sudo sysctl --system
+
 # Set your AI API key
 export GEMINI_API_KEY="your-api-key"
 
@@ -513,6 +518,35 @@ Logs are written to both console and `minecraft_ai.log`:
 ### High CPU Usage
 - Reduce `tick_rate` in config.yaml
 - Enable `throttle_on_high_cpu` in performance settings
+
+### Permission Denied / Memory Reading Fails
+
+If you get "Permission denied" errors when reading Minecraft's memory, this is due to Linux kernel security settings (Yama ptrace_scope).
+
+**Quick Fix (temporary, lasts until reboot):**
+```bash
+sudo sysctl kernel.yama.ptrace_scope=0
+```
+
+**Permanent Fix (survives reboot):**
+```bash
+echo 'kernel.yama.ptrace_scope=0' | sudo tee -a /etc/sysctl.d/99-minecraft.conf
+sudo sysctl --system
+```
+
+**What this does:**
+- `ptrace_scope=0` allows any process to read memory of another process owned by the same user
+- This is required for the bot to read Minecraft's game state without sudo
+- Setting this to 0 slightly reduces security - only do this on your development machine
+
+**Check current setting:**
+```bash
+cat /proc/sys/kernel/yama/ptrace_scope
+```
+- `0` = Full access (bot works without sudo) ✅
+- `1` = Restricted (requires sudo) ⚠️
+- `2` = Admin only ⚠️
+- `3` = No access ❌
 
 ## Contributing
 
