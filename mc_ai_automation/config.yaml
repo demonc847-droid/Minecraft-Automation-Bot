@@ -1,0 +1,185 @@
+# Minecraft AI Automation - Configuration File
+# =============================================
+
+# AI Provider Settings
+# Supported providers: "gemini", "groq", "ollama"
+ai_provider: "gemini"
+
+# API Keys (use environment variables for security)
+# Set these in your environment: GEMINI_API_KEY, GROQ_API_KEY
+api_key: "${GEMINI_API_KEY}"  # Will be read from environment variable
+
+# Ollama settings (only needed if using local Ollama)
+ollama:
+  host: "localhost"
+  port: 11434
+  model: "llama2"
+
+# Game Settings
+tick_rate: 20  # Ticks per second (Minecraft runs at 20 TPS)
+
+# Logging Configuration
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_file: "minecraft_ai.log"
+log_to_console: true
+log_to_file: true
+
+# Phase Order Configuration
+# The automation will progress through these phases in order
+phase_order:
+  - foundation
+  - resources
+  - tools
+  - mining
+  - nether
+  - stronghold
+  - dragon
+
+# Starting Phase (optional)
+# Leave empty to start from the beginning
+starting_phase: ""
+
+# Safety Settings
+safety:
+  # Pause automation if health drops below this value
+  min_health_threshold: 6.0
+  
+  # Pause automation if hunger drops below this value
+  min_hunger_threshold: 4.0
+  
+  # Auto-eat when hunger is below this value
+  auto_eat_threshold: 10.0
+  
+  # Retreat from threats closer than this distance (blocks)
+  threat_distance_threshold: 5.0
+  
+  # Enable emergency pause (press F3+P to pause)
+  emergency_pause_enabled: true
+
+# Movement Settings
+movement:
+  # Default movement speed: "walk" or "sprint"
+  default_speed: "walk"
+  
+  # Maximum distance to pathfind in one action (blocks)
+  max_pathfind_distance: 100
+  
+  # Enable anti-detection human-like movements
+  human_like_movement: true
+  
+  # Random movement variance (0.0 to 1.0)
+  movement_variance: 0.1
+
+# Combat Settings
+combat:
+  # Auto-attack hostile entities within this distance (blocks)
+  auto_attack_range: 4.0
+  
+  # Prefer fleeing over fighting when health is low
+  flee_when_low_health: true
+  
+  # Health threshold to trigger fleeing
+  flee_health_threshold: 8.0
+
+# Inventory Settings
+inventory:
+  # Auto-organize inventory
+  auto_organize: true
+  
+  # Keep these items in hotbar (item IDs)
+  hotbar_priority:
+    - "minecraft:diamond_sword"
+    - "minecraft:diamond_pickaxe"
+    - "minecraft:diamond_axe"
+    - "minecraft:diamond_shovel"
+    - "minecraft:torch"
+    - "minecraft:cooked_beef"
+    - "minecraft:water_bucket"
+    - "minecraft:shield"
+  
+  # Drop these items automatically (item IDs)
+  auto_drop:
+    - "minecraft:cobblestone"
+    - "minecraft:dirt"
+    - "minecraft:gravel"
+
+# Mining Settings
+mining:
+  # Target Y level for diamond mining
+  diamond_y_level: -59
+  
+  # Enable branch mining pattern
+  branch_mine: true
+  
+  # Branch mine spacing (blocks between branches)
+  branch_spacing: 2
+  
+  # Maximum depth to mine
+  max_mine_depth: -64
+
+# Nether Settings
+nether:
+  # Nether portal coordinates (set automatically when built)
+  portal_coords:
+    x: 0
+    y: 0
+    z: 0
+  
+  # Auto-barter with Piglins
+  auto_barter: true
+  
+  # Items to barter (gold ingots)
+  barter_item: "minecraft:gold_ingot"
+
+# Debug Settings
+debug:
+  # Enable debug mode (more verbose logging)
+  enabled: false
+  
+  # Show game state in console
+  show_game_state: false
+  
+  # Save game state snapshots
+  save_snapshots: false
+  
+  # Snapshot interval (seconds)
+  snapshot_interval: 60
+  
+  # Simulate game (no actual input)
+  simulation_mode: false
+
+# Memory Reading Settings
+memory:
+  # Path to offsets configuration file
+  offsets_file: "offsets.json"
+  
+  # Auto-detect Minecraft process
+  auto_detect_process: true
+  
+  # Minecraft process name to look for
+  process_name: "minecraft"
+
+# Performance Settings
+performance:
+  # Maximum CPU usage percentage (0-100)
+  max_cpu_usage: 50
+  
+  # Enable performance monitoring
+  monitor_performance: true
+  
+  # Throttle actions if CPU usage is high
+  throttle_on_high_cpu: true
+
+# Notification Settings (optional)
+notifications:
+  # Enable desktop notifications
+  enabled: false
+  
+  # Notify on phase completion
+  on_phase_complete: true
+  
+  # Notify on death
+  on_death: true
+  
+  # Notify on errors
+  on_error: true
