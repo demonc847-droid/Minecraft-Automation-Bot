@@ -1,0 +1,39 @@
+# Minecraft AI Automation - Python Dependencies
+# =============================================
+
+# Input simulation
+pynput>=1.7.6           # Mouse and keyboard control
+
+# Numerical operations
+numpy>=1.24.0           # Math and array operations
+
+# HTTP requests
+requests>=2.31.0        # API calls
+
+# AI Providers
+google-generativeai>=0.3.0  # Google Gemini API
+groq>=0.4.0                 # Groq API
+
+# Optional: Local AI (Ollama doesn't need a Python package, it's accessed via HTTP)
+
+# Memory reading (Windows-specific)
+# pymem>=1.10.0         # Uncomment for Windows memory reading
+# psutil>=5.9.0         # Process utilities
+
+# Configuration
+pyyaml>=6.0             # YAML config files
+
+# Testing
+pytest>=7.4.0           # Test framework
+pytest-cov>=4.1.0       # Test coverage
+
+# Development
+black>=23.0.0           # Code formatter
+flake8>=6.0.0           # Linter
+mypy>=1.5.0             # Type checker
+
+# Logging
+colorlog>=6.7.0         # Colored logging output
+
+# Data validation
+pydantic>=2.0.0         # Data validation and settings management
